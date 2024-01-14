@@ -1,10 +1,10 @@
-'''
+"""
 ## Prioritised Experience Replay (PER) Memory ##
 # Taken from msinto93 who adapted from OpenAI
 
 # Adapted from: https://github.com/openai/baselines/blob/master/baselines/deepq/replay_buffer.py
 # Creates prioritised replay memory buffer to add experiences to and sample batches of experiences from
-'''
+"""
 
 import numpy as np
 import random
@@ -31,12 +31,12 @@ class ReplayBuffer(object):
         return len(self._storage)
 
     def add(self, data):
-        #data = (obs_t, action, reward, obs_tp1, done, gamma)
+        # data = (obs_t, action, reward, obs_tp1, done, gamma)
 
         self._storage.append(data)
-        
+
         self._next_idx += 1
-        
+
     def remove(self, num_samples):
         del self._storage[:num_samples]
         self._next_idx = len(self._storage)
@@ -52,7 +52,14 @@ class ReplayBuffer(object):
             obses_tp1.append(np.array(obs_tp1, copy=False))
             dones.append(done)
             gammas.append(gamma)
-        return np.array(obses_t), np.array(actions), np.array(rewards), np.array(obses_tp1), np.array(dones), np.expand_dims(np.array(gammas), axis = 1)
+        return (
+            np.array(obses_t),
+            np.array(actions),
+            np.array(rewards),
+            np.array(obses_tp1),
+            np.array(dones),
+            np.expand_dims(np.array(gammas), axis=1),
+        )
 
     def sample(self, batch_size):
         """Sample a batch of experiences.
@@ -84,7 +91,6 @@ class ReplayBuffer(object):
 
 class PrioritizedReplayBuffer(ReplayBuffer):
     def __init__(self):
-        
         size = Settings.REPLAY_BUFFER_SIZE
         alpha = Settings.PRIORITY_ALPHA
         """Create Prioritized Replay buffer.
@@ -107,7 +113,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self._alpha = alpha
 
         self.it_capacity = 1
-        while self.it_capacity < size*2:     # We use double the soft capacity of the PER for the segment trees to allow for any overflow over the soft capacity limit before samples are removed
+        while (
+            self.it_capacity < size * 2
+        ):  # We use double the soft capacity of the PER for the segment trees to allow for any overflow over the soft capacity limit before samples are removed
             self.it_capacity *= 2
 
         self._it_sum = SumSegmentTree(self.it_capacity)
@@ -116,14 +124,16 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     def add(self, *args, **kwargs):
         idx = self._next_idx
-        assert idx < self.it_capacity, "Number of samples in replay memory exceeds capacity of segment trees. Please increase capacity of segment trees or increase the frequency at which samples are removed from the replay memory"
-        
+        assert (
+            idx < self.it_capacity
+        ), "Number of samples in replay memory exceeds capacity of segment trees. Please increase capacity of segment trees or increase the frequency at which samples are removed from the replay memory"
+
         super().add(*args, **kwargs)
-        self._it_sum[idx] = self._max_priority ** self._alpha
-        self._it_min[idx] = self._max_priority ** self._alpha
-        
+        self._it_sum[idx] = self._max_priority**self._alpha
+        self._it_min[idx] = self._max_priority**self._alpha
+
     def remove(self, num_samples):
-        super().remove(num_samples)  
+        super().remove(num_samples)
         self._it_sum.remove_items(num_samples)
         self._it_min.remove_items(num_samples)
 
@@ -183,7 +193,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         weights = []
         p_min = self._it_min.min() / self._it_sum.sum()
         max_weight = (p_min * len(self._storage)) ** (-beta)
-        
+
         for idx in idxes:
             p_sample = self._it_sum[idx] / self._it_sum.sum()
             weight = (p_sample * len(self._storage)) ** (-beta)
@@ -211,26 +221,17 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         for idx, priority in zip(idxes, priorities):
             assert priority > 0
             assert 0 <= idx < len(self._storage)
-            self._it_sum[idx] = priority ** self._alpha
-            self._it_min[idx] = priority ** self._alpha
+            self._it_sum[idx] = priority**self._alpha
+            self._it_min[idx] = priority**self._alpha
 
             self._max_priority = max(self._max_priority, priority)
 
 
-
-
-
-
-
-
-
-
-
-'''
+"""
 ## Segment Tree ##
 # Adapted from: https://github.com/openai/baselines/blob/master/baselines/common/segment_tree.py
 # Segment tree data structures used to store the priorities of the samples in the PER for efficient priority-based sampling. 
-'''
+"""
 
 
 class SegmentTree(object):
@@ -260,7 +261,9 @@ class SegmentTree(object):
             neutral element for the operation above. eg. float('-inf')
             for max and 0 for sum.
         """
-        assert capacity > 0 and capacity & (capacity - 1) == 0, "capacity must be positive and a power of 2."
+        assert (
+            capacity > 0 and capacity & (capacity - 1) == 0
+        ), "capacity must be positive and a power of 2."
         self._capacity = capacity
         self.neutral_element = neutral_element
         self._value = [neutral_element for _ in range(2 * capacity)]
@@ -278,7 +281,7 @@ class SegmentTree(object):
             else:
                 return self._operation(
                     self._reduce_helper(start, mid, 2 * node, node_start, mid),
-                    self._reduce_helper(mid + 1, end, 2 * node + 1, mid + 1, node_end)
+                    self._reduce_helper(mid + 1, end, 2 * node + 1, mid + 1, node_end),
                 )
 
     def reduce(self, start=0, end=None):
@@ -313,34 +316,30 @@ class SegmentTree(object):
         idx //= 2
         while idx >= 1:
             self._value[idx] = self._operation(
-                self._value[2 * idx],
-                self._value[2 * idx + 1]
+                self._value[2 * idx], self._value[2 * idx + 1]
             )
             idx //= 2
 
     def __getitem__(self, idx):
         assert 0 <= idx < self._capacity
         return self._value[self._capacity + idx]
-    
+
     def remove_items(self, num_items):
         """Removes num_items leaf nodes from the tree and appends num_items leaf nodes of neutral_element value (0 or inf) to end of tree,
-           effectively left shifting remaining leaf nodes by num_items"""
-        del self._value[self._capacity:(self._capacity + num_items)]
+        effectively left shifting remaining leaf nodes by num_items"""
+        del self._value[self._capacity : (self._capacity + num_items)]
         neutral_elements = [self.neutral_element for _ in range(num_items)]
         self._value += neutral_elements
-        for idx in range(self._capacity-1, 0, -1):
+        for idx in range(self._capacity - 1, 0, -1):
             self._value[idx] = self._operation(
-                self._value[2 * idx],
-                self._value[2 * idx + 1]
-                )
-                            
+                self._value[2 * idx], self._value[2 * idx + 1]
+            )
+
 
 class SumSegmentTree(SegmentTree):
     def __init__(self, capacity):
         super(SumSegmentTree, self).__init__(
-            capacity=capacity,
-            operation=operator.add,
-            neutral_element=0.0
+            capacity=capacity, operation=operator.add, neutral_element=0.0
         )
 
     def sum(self, start=0, end=None):
@@ -379,14 +378,10 @@ class SumSegmentTree(SegmentTree):
 class MinSegmentTree(SegmentTree):
     def __init__(self, capacity):
         super(MinSegmentTree, self).__init__(
-            capacity=capacity,
-            operation=min,
-            neutral_element=float('inf')
+            capacity=capacity, operation=min, neutral_element=float("inf")
         )
 
     def min(self, start=0, end=None):
         """Returns min(arr[start], ...,  arr[end])"""
 
         return super(MinSegmentTree, self).reduce(start, end)
-    
-    

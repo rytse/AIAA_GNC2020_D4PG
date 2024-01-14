@@ -24,10 +24,11 @@ import tensorflow as tf
 import numpy as np
 import time
 import multiprocessing
-import queue # for empty error catching
+import queue  # for empty error catching
 
 from build_neural_networks import BuildActorNetwork, BuildQNetwork
 from settings import Settings
+
 
 class Learner:
     def __init__(self, sess, saver, replay_buffer, writer):
@@ -39,24 +40,50 @@ class Learner:
         self.replay_buffer = replay_buffer
         self.writer = writer
 
-        with tf.variable_scope("Preparing_placeholders"):
+        with tf.compat.v1.variable_scope("Preparing_placeholders"):
             # Defining placeholders for training
-#            self.state_placeholder                       = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.STATE_SIZE], name = "state_placeholder") # the '*' unpacks the STATE_SIZE list (incase it's pixels of higher dimension)
-#            self.action_placeholder                      = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.ACTION_SIZE], name = "action_placeholder") # placeholder for actions
-#            self.target_bins_placeholder                 = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.NUMBER_OF_BINS], name = "target_bins_placeholder") # Bin values of target network with Bellman update applied
-#            self.target_q_distribution_placeholder       = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.NUMBER_OF_BINS], name = "target_q_distribution_placeholder")  # Future q-distribution from target critic
-#            self.dQ_dAction_placeholder                  = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.ACTION_SIZE], name = "dQ_dAction_placeholder") # Gradient of critic predicted value with respect to input actions
-#            self.importance_sampling_weights_placeholder = tf.placeholder(dtype = tf.float32, shape =  Settings.MINI_BATCH_SIZE, name = "importance_sampling_weights_placeholder") # [PRIORITY_REPLAY_BUFFER only] Holds the weights that are used to remove bias from priority sampling
+            #            self.state_placeholder                       = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.STATE_SIZE], name = "state_placeholder") # the '*' unpacks the STATE_SIZE list (incase it's pixels of higher dimension)
+            #            self.action_placeholder                      = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.ACTION_SIZE], name = "action_placeholder") # placeholder for actions
+            #            self.target_bins_placeholder                 = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.NUMBER_OF_BINS], name = "target_bins_placeholder") # Bin values of target network with Bellman update applied
+            #            self.target_q_distribution_placeholder       = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.NUMBER_OF_BINS], name = "target_q_distribution_placeholder")  # Future q-distribution from target critic
+            #            self.dQ_dAction_placeholder                  = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.ACTION_SIZE], name = "dQ_dAction_placeholder") # Gradient of critic predicted value with respect to input actions
+            #            self.importance_sampling_weights_placeholder = tf.placeholder(dtype = tf.float32, shape =  Settings.MINI_BATCH_SIZE, name = "importance_sampling_weights_placeholder") # [PRIORITY_REPLAY_BUFFER only] Holds the weights that are used to remove bias from priority sampling
 
-            self.state_placeholder                       = tf.placeholder(dtype = tf.float32, shape = [None, Settings.STATE_SIZE], name = "state_placeholder") # the '*' unpacks the STATE_SIZE list (incase it's pixels of higher dimension)
-            self.action_placeholder                      = tf.placeholder(dtype = tf.float32, shape = [None, Settings.ACTION_SIZE], name = "action_placeholder") # placeholder for actions
-            self.target_bins_placeholder                 = tf.placeholder(dtype = tf.float32, shape = [None, Settings.NUMBER_OF_BINS], name = "target_bins_placeholder") # Bin values of target network with Bellman update applied
-            self.target_q_distribution_placeholder       = tf.placeholder(dtype = tf.float32, shape = [None, Settings.NUMBER_OF_BINS], name = "target_q_distribution_placeholder")  # Future q-distribution from target critic
-            self.dQ_dAction_placeholder                  = tf.placeholder(dtype = tf.float32, shape = [Settings.MINI_BATCH_SIZE, Settings.ACTION_SIZE], name = "dQ_dAction_placeholder") # Gradient of critic predicted value with respect to input actions
-            self.importance_sampling_weights_placeholder = tf.placeholder(dtype = tf.float32, shape =  None, name = "importance_sampling_weights_placeholder") # [PRIORITY_REPLAY_BUFFER only] Holds the weights that are used to remove bias from priority sampling
+            self.state_placeholder = tf.compat.v1.placeholder(
+                dtype=tf.float32,
+                shape=[None, Settings.STATE_SIZE],
+                name="state_placeholder",
+            )  # the '*' unpacks the STATE_SIZE list (incase it's pixels of higher dimension)
+            self.action_placeholder = tf.compat.v1.placeholder(
+                dtype=tf.float32,
+                shape=[None, Settings.ACTION_SIZE],
+                name="action_placeholder",
+            )  # placeholder for actions
+            self.target_bins_placeholder = tf.compat.v1.placeholder(
+                dtype=tf.float32,
+                shape=[None, Settings.NUMBER_OF_BINS],
+                name="target_bins_placeholder",
+            )  # Bin values of target network with Bellman update applied
+            self.target_q_distribution_placeholder = tf.compat.v1.placeholder(
+                dtype=tf.float32,
+                shape=[None, Settings.NUMBER_OF_BINS],
+                name="target_q_distribution_placeholder",
+            )  # Future q-distribution from target critic
+            self.dQ_dAction_placeholder = tf.compat.v1.placeholder(
+                dtype=tf.float32,
+                shape=[Settings.MINI_BATCH_SIZE, Settings.ACTION_SIZE],
+                name="dQ_dAction_placeholder",
+            )  # Gradient of critic predicted value with respect to input actions
+            self.importance_sampling_weights_placeholder = tf.compat.v1.placeholder(
+                dtype=tf.float32,
+                shape=None,
+                name="importance_sampling_weights_placeholder",
+            )  # [PRIORITY_REPLAY_BUFFER only] Holds the weights that are used to remove bias from priority sampling
 
         # The reward options that the distributional critic predicts the liklihood of being in
-        self.bins = np.linspace(Settings.MIN_V, Settings.MAX_V, Settings.NUMBER_OF_BINS, dtype = np.float32)
+        self.bins = np.linspace(
+            Settings.MIN_V, Settings.MAX_V, Settings.NUMBER_OF_BINS, dtype=np.float32
+        )
 
         ######################################################
         ##### Build the networks and training operations #####
@@ -73,62 +100,95 @@ class Learner:
 
         print("Learner created!")
 
-
     def create_summary_functions(self):
-
         # Creates the operation that, when run, will log the appropriate data to tensorboard
-        with tf.variable_scope("Logging_Learning"):
+        with tf.compat.v1.variable_scope("Logging_Learning"):
             # The critic loss during training is the only logged item
-            self.iteration_loss_placeholder = tf.placeholder(tf.float32)
-            self.iteration_loss_summary = tf.summary.scalar("Loss", self.iteration_loss_placeholder)
-            self.iteration_summary = tf.summary.merge([self.iteration_loss_summary])
-
+            self.iteration_loss_placeholder = tf.compat.v1.placeholder(tf.float32)
+            self.iteration_loss_summary = tf.compat.v1.summary.scalar(
+                "Loss", self.iteration_loss_placeholder
+            )
+            self.iteration_summary = tf.compat.v1.summary.merge(
+                [self.iteration_loss_summary]
+            )
 
     def build_main_networks(self):
         ##################################
         #### Build the learned critic ####
         ##################################
-        self.critic = BuildQNetwork(self.state_placeholder, self.action_placeholder, scope='learner_critic_main')
+        self.critic = BuildQNetwork(
+            self.state_placeholder, self.action_placeholder, scope="learner_critic_main"
+        )
 
         # Build the critic training function
-        self.train_critic_one_step, self.projected_target_distribution = self.critic.generate_training_function(self.target_q_distribution_placeholder, self.target_bins_placeholder, self.importance_sampling_weights_placeholder)
+        (
+            self.train_critic_one_step,
+            self.projected_target_distribution,
+        ) = self.critic.generate_training_function(
+            self.target_q_distribution_placeholder,
+            self.target_bins_placeholder,
+            self.importance_sampling_weights_placeholder,
+        )
 
         #################################
         #### Build the learned actor ####
         #################################
-        self.actor = BuildActorNetwork(self.state_placeholder, scope='learner_actor_main')
+        self.actor = BuildActorNetwork(
+            self.state_placeholder, scope="learner_actor_main"
+        )
 
         # Build the actor training function
-        self.train_actor_one_step = self.actor.generate_training_function(self.dQ_dAction_placeholder)
-
+        self.train_actor_one_step = self.actor.generate_training_function(
+            self.dQ_dAction_placeholder
+        )
 
     def build_target_networks(self):
         ###########################################
         #### Build the target actor and critic ####
         ###########################################
-        self.target_critic = BuildQNetwork(self.state_placeholder, self.action_placeholder, scope='learner_critic_target')
-        self.target_actor  = BuildActorNetwork(self.state_placeholder, scope='learner_actor_target')
-
+        self.target_critic = BuildQNetwork(
+            self.state_placeholder,
+            self.action_placeholder,
+            scope="learner_critic_target",
+        )
+        self.target_actor = BuildActorNetwork(
+            self.state_placeholder, scope="learner_actor_target"
+        )
 
     def build_target_parameter_update_operations(self):
         # Build operations that either
-            # 1) initialize target networks to be identical to main networks 2) slowly
-            # 2) slowly copy main network parameters to target networks according to Settings.TARGET_NETWORK_TAU
+        # 1) initialize target networks to be identical to main networks 2) slowly
+        # 2) slowly copy main network parameters to target networks according to Settings.TARGET_NETWORK_TAU
         main_parameters = self.actor.parameters + self.critic.parameters
         target_parameters = self.target_actor.parameters + self.target_critic.parameters
 
         # Build operation that fully copies the main network parameters to the targets [Option 1 above]
         initialize_target_network_parameters = []
         # Looping across all variables in the main critic and main actor
-        for source_variable, destination_variable in zip(main_parameters, target_parameters):
-            initialize_target_network_parameters.append(destination_variable.assign(source_variable))
+        for source_variable, destination_variable in zip(
+            main_parameters, target_parameters
+        ):
+            initialize_target_network_parameters.append(
+                destination_variable.assign(source_variable)
+            )
 
         # Build operation that slowly updates target networks according to Settings.TARGET_NETWORK_TAU [Option 2 above]
         update_target_network_parameters = []
         # Looping across all variables in the main critic and main actor
-        for source_variable, destination_variable in zip(main_parameters, target_parameters):
+        for source_variable, destination_variable in zip(
+            main_parameters, target_parameters
+        ):
             # target = tau*main + (1 - tau)*target
-            update_target_network_parameters.append(destination_variable.assign((tf.multiply(source_variable, Settings.TARGET_NETWORK_TAU) + tf.multiply(destination_variable, 1. - Settings.TARGET_NETWORK_TAU))))
+            update_target_network_parameters.append(
+                destination_variable.assign(
+                    (
+                        tf.multiply(source_variable, Settings.TARGET_NETWORK_TAU)
+                        + tf.multiply(
+                            destination_variable, 1.0 - Settings.TARGET_NETWORK_TAU
+                        )
+                    )
+                )
+            )
 
         # Save both operations to self object for later use
         self.initialize_target_network_parameters = initialize_target_network_parameters
@@ -136,8 +196,8 @@ class Learner:
 
     def generate_queue(self):
         # Generate the queues responsible for communicating with the learner
-        self.agent_to_learner = multiprocessing.Queue(maxsize = 1)
-        self.learner_to_agent = multiprocessing.Queue(maxsize = 1)
+        self.agent_to_learner = multiprocessing.Queue(maxsize=1)
+        self.learner_to_agent = multiprocessing.Queue(maxsize=1)
 
         return self.agent_to_learner, self.learner_to_agent
 
@@ -160,84 +220,153 @@ class Learner:
             # We slowly anneal priority_beta towards 1.0 over the course of training.
             # Lower beta allows the prioritized samples to be weighted unfairly,
             # but this can help training, at least initially.
-            priority_beta = Settings.PRIORITY_BETA_START # starting beta value
-            beta_increment = (Settings.PRIORITY_BETA_END - Settings.PRIORITY_BETA_START) / Settings.MAX_TRAINING_ITERATIONS # to increment on each iteration
+            priority_beta = Settings.PRIORITY_BETA_START  # starting beta value
+            beta_increment = (
+                Settings.PRIORITY_BETA_END - Settings.PRIORITY_BETA_START
+            ) / Settings.MAX_TRAINING_ITERATIONS  # to increment on each iteration
         else:
             # If we aren't using a priority buffer, set the importance sampled weights to ones for the entire run
-            weights_batch = np.ones(shape = Settings.MINI_BATCH_SIZE)
-
+            weights_batch = np.ones(shape=Settings.MINI_BATCH_SIZE)
 
         ###############################
         ##### Start Training Loop #####
         ###############################
-        while self.total_training_iterations < Settings.MAX_TRAINING_ITERATIONS and not stop_run_flag.is_set():
-
+        while (
+            self.total_training_iterations < Settings.MAX_TRAINING_ITERATIONS
+            and not stop_run_flag.is_set()
+        ):
             # Check if the agent wants some q-distributions calculated
             try:
-                state_log, action_log, next_state_log, reward_log, done_log, gamma_log = self.agent_to_learner.get(False)
+                (
+                    state_log,
+                    action_log,
+                    next_state_log,
+                    reward_log,
+                    done_log,
+                    gamma_log,
+                ) = self.agent_to_learner.get(False)
 
                 # Reshapping
-                gamma_log = np.reshape(gamma_log,  [-1, 1])
+                gamma_log = np.reshape(gamma_log, [-1, 1])
 
                 # Get the online q-distribution
-                critic_distribution = self.sess.run(self.critic.q_distribution, feed_dict = {self.state_placeholder: state_log, self.action_placeholder: action_log}) # [episode length, number of bins]
+                critic_distribution = self.sess.run(
+                    self.critic.q_distribution,
+                    feed_dict={
+                        self.state_placeholder: state_log,
+                        self.action_placeholder: action_log,
+                    },
+                )  # [episode length, number of bins]
 
                 # Clean next actions from the target actor
-                clean_next_actions = self.sess.run(self.target_actor.action_scaled, {self.state_placeholder:next_state_log}) # [episode length, num_actions]
+                clean_next_actions = self.sess.run(
+                    self.target_actor.action_scaled,
+                    {self.state_placeholder: next_state_log},
+                )  # [episode length, num_actions]
 
                 # Get the target q-distribution
-                target_critic_distribution = self.sess.run(self.target_critic.q_distribution, feed_dict = {self.state_placeholder:state_log, self.action_placeholder:clean_next_actions}) # [episode length, number of bins]
+                target_critic_distribution = self.sess.run(
+                    self.target_critic.q_distribution,
+                    feed_dict={
+                        self.state_placeholder: state_log,
+                        self.action_placeholder: clean_next_actions,
+                    },
+                )  # [episode length, number of bins]
 
                 # Create batch of bins [see further description below]
-                target_bins = np.repeat(np.expand_dims(self.bins, axis = 0), len(reward_log), axis = 0) # [episode length, number_of_bins]
+                target_bins = np.repeat(
+                    np.expand_dims(self.bins, axis=0), len(reward_log), axis=0
+                )  # [episode length, number_of_bins]
                 target_bins[done_log, :] = 0.0
-                target_bins = np.expand_dims(reward_log, axis = 1) + (target_bins*gamma_log)
+                target_bins = np.expand_dims(reward_log, axis=1) + (
+                    target_bins * gamma_log
+                )
 
                 # Calculating the bellman distribution (r + gamma*target_q_distribution). The critic loss is with respect to this projection.
-                projected_target_distribution = self.sess.run(self.projected_target_distribution, feed_dict = {self.target_q_distribution_placeholder: target_critic_distribution, self.target_bins_placeholder: target_bins})
+                projected_target_distribution = self.sess.run(
+                    self.projected_target_distribution,
+                    feed_dict={
+                        self.target_q_distribution_placeholder: target_critic_distribution,
+                        self.target_bins_placeholder: target_bins,
+                    },
+                )
 
                 # Calculating the loss at each timestep
-                weights_batch = weights_batch = np.ones(shape = len(reward_log))
-                loss_log = self.sess.run(self.critic.loss, feed_dict = {self.state_placeholder:state_log, self.action_placeholder:action_log, self.target_q_distribution_placeholder:target_critic_distribution, self.target_bins_placeholder:target_bins, self.importance_sampling_weights_placeholder:weights_batch})
+                weights_batch = weights_batch = np.ones(shape=len(reward_log))
+                loss_log = self.sess.run(
+                    self.critic.loss,
+                    feed_dict={
+                        self.state_placeholder: state_log,
+                        self.action_placeholder: action_log,
+                        self.target_q_distribution_placeholder: target_critic_distribution,
+                        self.target_bins_placeholder: target_bins,
+                        self.importance_sampling_weights_placeholder: weights_batch,
+                    },
+                )
 
                 # Send the results back to the agent
-                self.learner_to_agent.put((critic_distribution, target_critic_distribution, projected_target_distribution, loss_log))
+                self.learner_to_agent.put(
+                    (
+                        critic_distribution,
+                        target_critic_distribution,
+                        projected_target_distribution,
+                        loss_log,
+                    )
+                )
 
             except queue.Empty:
                 # If queue was empty, do nothing
                 pass
 
             # If we don't have enough data yet to train OR we want to wait before we start to train
-            if (self.replay_buffer.how_filled() < Settings.MINI_BATCH_SIZE) or (self.replay_buffer.how_filled() < Settings.REPLAY_BUFFER_START_TRAINING_FULLNESS):
-                continue # Skip this training iteration. Wait for more training data.
+            if (self.replay_buffer.how_filled() < Settings.MINI_BATCH_SIZE) or (
+                self.replay_buffer.how_filled()
+                < Settings.REPLAY_BUFFER_START_TRAINING_FULLNESS
+            ):
+                continue  # Skip this training iteration. Wait for more training data.
 
             # Sample a mini-batch of data from the replay_buffer
             if Settings.PRIORITY_REPLAY_BUFFER:
                 sampled_batch = self.replay_buffer.sample(priority_beta)
-                weights_batch = sampled_batch[6] # [priority-only data] used for removing bias in prioritized data
-                index_batch   = sampled_batch[7] # [priority-only data] used for updating priorities
+                weights_batch = sampled_batch[
+                    6
+                ]  # [priority-only data] used for removing bias in prioritized data
+                index_batch = sampled_batch[
+                    7
+                ]  # [priority-only data] used for updating priorities
             else:
                 sampled_batch = self.replay_buffer.sample()
 
             # Unpack the training data
-            states_batch           = sampled_batch[0]
-            actions_batch          = sampled_batch[1]
-            rewards_batch          = sampled_batch[2]
-            next_states_batch      = sampled_batch[3]
-            dones_batch            = sampled_batch[4]
-            gammas_batch           = sampled_batch[5]
+            states_batch = sampled_batch[0]
+            actions_batch = sampled_batch[1]
+            rewards_batch = sampled_batch[2]
+            next_states_batch = sampled_batch[3]
+            dones_batch = sampled_batch[4]
+            gammas_batch = sampled_batch[5]
 
             ###################################
             ##### Prepare Critic Training #####
             ###################################
             # Get clean next actions by feeding the next states through the target actor
-            clean_next_actions = self.sess.run(self.target_actor.action_scaled, {self.state_placeholder:next_states_batch}) # [batch_size, num_actions]
+            clean_next_actions = self.sess.run(
+                self.target_actor.action_scaled,
+                {self.state_placeholder: next_states_batch},
+            )  # [batch_size, num_actions]
 
             # Get the next q-distribution by passing the next states and clean next actions through the target critic
-            target_critic_distribution = self.sess.run(self.target_critic.q_distribution, {self.state_placeholder:next_states_batch, self.action_placeholder:clean_next_actions}) # [batch_size, number_of_bins]
+            target_critic_distribution = self.sess.run(
+                self.target_critic.q_distribution,
+                {
+                    self.state_placeholder: next_states_batch,
+                    self.action_placeholder: clean_next_actions,
+                },
+            )  # [batch_size, number_of_bins]
 
             # Create batch of bins
-            target_bins = np.repeat(np.expand_dims(self.bins, axis = 0), Settings.MINI_BATCH_SIZE, axis = 0) # [batch_size, number_of_bins]
+            target_bins = np.repeat(
+                np.expand_dims(self.bins, axis=0), Settings.MINI_BATCH_SIZE, axis=0
+            )  # [batch_size, number_of_bins]
 
             # If this data in the batch corresponds to the end of an episode (dones_batch[i] = True),
             # set all the bins to 0.0. This will eliminate the inclusion of the predicted future
@@ -249,31 +378,58 @@ class Learner:
             # expected reward, according to the recently-received reward.
             # If the new reward is outside of the current bin, then we will
             # adjust the probability that is assigned to the bin.
-            target_bins = np.expand_dims(rewards_batch, axis = 1) + (target_bins*gammas_batch)
+            target_bins = np.expand_dims(rewards_batch, axis=1) + (
+                target_bins * gammas_batch
+            )
 
             #####################################
             ##### TRAIN THE CRITIC ONE STEP #####
             #####################################
-            critic_loss, _ = self.sess.run([self.critic.loss, self.train_critic_one_step], {self.state_placeholder:states_batch, self.action_placeholder:actions_batch, self.target_q_distribution_placeholder:target_critic_distribution, self.target_bins_placeholder:target_bins, self.importance_sampling_weights_placeholder:weights_batch})
-
+            critic_loss, _ = self.sess.run(
+                [self.critic.loss, self.train_critic_one_step],
+                {
+                    self.state_placeholder: states_batch,
+                    self.action_placeholder: actions_batch,
+                    self.target_q_distribution_placeholder: target_critic_distribution,
+                    self.target_bins_placeholder: target_bins,
+                    self.importance_sampling_weights_placeholder: weights_batch,
+                },
+            )
 
             ##################################
             ##### Prepare Actor Training #####
             ##################################
             # Get clean actions that the main actor would have taken for this batch of states if there were no noise added
-            clean_actions = self.sess.run(self.actor.action_scaled, {self.state_placeholder:states_batch})
+            clean_actions = self.sess.run(
+                self.actor.action_scaled, {self.state_placeholder: states_batch}
+            )
 
             # Calculate the derivative of the main critic's q-value with respect to these actions
-            dQ_dAction = self.sess.run(self.critic.dQ_dAction, {self.state_placeholder:states_batch, self.action_placeholder:clean_actions}) # also known as action gradients
+            dQ_dAction = self.sess.run(
+                self.critic.dQ_dAction,
+                {
+                    self.state_placeholder: states_batch,
+                    self.action_placeholder: clean_actions,
+                },
+            )  # also known as action gradients
 
             ####################################
             ##### TRAIN THE ACTOR ONE STEP #####
             ####################################
-            self.sess.run(self.train_actor_one_step, {self.state_placeholder:states_batch, self.dQ_dAction_placeholder:dQ_dAction[0]})
-
+            self.sess.run(
+                self.train_actor_one_step,
+                {
+                    self.state_placeholder: states_batch,
+                    self.dQ_dAction_placeholder: dQ_dAction[0],
+                },
+            )
 
             # If it's time to update the target networks
-            if self.total_training_iterations % Settings.UPDATE_TARGET_NETWORKS_EVERY_NUM_ITERATIONS == 0:
+            if (
+                self.total_training_iterations
+                % Settings.UPDATE_TARGET_NETWORKS_EVERY_NUM_ITERATIONS
+                == 0
+            ):
                 # Update target networks according to TAU!
                 self.sess.run(self.update_target_network_parameters)
 
@@ -282,45 +438,92 @@ class Learner:
                 # The priority replay buffer ranks the data according to how unexpected they were
                 # An unexpected data point will have high loss. Now that we've just calculated the loss,
                 # update the priorities in the replay buffer.
-                self.replay_buffer.update_priorities(index_batch, (np.abs(critic_loss)+Settings.PRIORITY_EPSILON))
+                self.replay_buffer.update_priorities(
+                    index_batch, (np.abs(critic_loss) + Settings.PRIORITY_EPSILON)
+                )
 
                 # Increment priority beta value slightly closer towards 1.0
                 priority_beta += beta_increment
 
                 # If it's time to check if the prioritized replay buffer is overful
-                if Settings.PRIORITY_REPLAY_BUFFER and (self.total_training_iterations % Settings.DUMP_PRIORITY_REPLAY_BUFFER_EVER_NUM_ITERATIONS == 0):
+                if Settings.PRIORITY_REPLAY_BUFFER and (
+                    self.total_training_iterations
+                    % Settings.DUMP_PRIORITY_REPLAY_BUFFER_EVER_NUM_ITERATIONS
+                    == 0
+                ):
                     # If the buffer is overfilled
-                    if (self.replay_buffer.how_filled() > Settings.REPLAY_BUFFER_SIZE):
+                    if self.replay_buffer.how_filled() > Settings.REPLAY_BUFFER_SIZE:
                         # Make the agents wait before adding any more data to the buffer
                         replay_buffer_dump_flag.clear()
                         # How overful is the buffer?
-                        samples_to_remove = self.replay_buffer.how_filled() - Settings.REPLAY_BUFFER_SIZE
+                        samples_to_remove = (
+                            self.replay_buffer.how_filled()
+                            - Settings.REPLAY_BUFFER_SIZE
+                        )
                         # Remove the appropriate number of samples
                         self.replay_buffer.remove(samples_to_remove)
                         # Allow the agents to continue now that the buffer is ready
                         replay_buffer_dump_flag.set()
 
             # If it's time to log the training performance to TensorBoard
-            if self.total_training_iterations % Settings.LOG_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS == 0:
+            if (
+                self.total_training_iterations
+                % Settings.LOG_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS
+                == 0
+            ):
                 # Logging the mean critic loss across the batch
-                summary = self.sess.run(self.iteration_summary, feed_dict = {self.iteration_loss_placeholder: np.mean(critic_loss)})
+                summary = self.sess.run(
+                    self.iteration_summary,
+                    feed_dict={self.iteration_loss_placeholder: np.mean(critic_loss)},
+                )
                 self.writer.add_summary(summary, self.total_training_iterations)
 
             # If it's time to save a checkpoint. Be it a regular checkpoint, the final planned iteration, or the final unplanned iteration
-            if (self.total_training_iterations % Settings.SAVE_CHECKPOINT_EVERY_NUM_ITERATIONS == 0) or (self.total_training_iterations == Settings.MAX_TRAINING_ITERATIONS) or stop_run_flag.is_set():
+            if (
+                (
+                    self.total_training_iterations
+                    % Settings.SAVE_CHECKPOINT_EVERY_NUM_ITERATIONS
+                    == 0
+                )
+                or (self.total_training_iterations == Settings.MAX_TRAINING_ITERATIONS)
+                or stop_run_flag.is_set()
+            ):
                 # Save the state of all networks and note the training iteration
-                self.saver.save(self.total_training_iterations, self.state_placeholder, self.actor.action_scaled)
+                self.saver.save(
+                    self.total_training_iterations,
+                    self.state_placeholder,
+                    self.actor.action_scaled,
+                )
 
             # If it's time to print the training performance to the screen
-            if self.total_training_iterations % Settings.DISPLAY_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS == 0:
-                print("Trained actor and critic %i iterations in %.2f minutes, at %.3f s/iteration. Now at iteration %i." % (Settings.DISPLAY_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS, (time.time() - start_time)/60, (time.time() - start_time)/Settings.DISPLAY_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS, self.total_training_iterations))
-                start_time = time.time() # resetting the timer for the next PERFORMANCE_UPDATE_EVERY_NUM_ITERATIONS of iterations
+            if (
+                self.total_training_iterations
+                % Settings.DISPLAY_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS
+                == 0
+            ):
+                print(
+                    "Trained actor and critic %i iterations in %.2f minutes, at %.3f s/iteration. Now at iteration %i."
+                    % (
+                        Settings.DISPLAY_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS,
+                        (time.time() - start_time) / 60,
+                        (time.time() - start_time)
+                        / Settings.DISPLAY_TRAINING_PERFORMANCE_EVERY_NUM_ITERATIONS,
+                        self.total_training_iterations,
+                    )
+                )
+                start_time = (
+                    time.time()
+                )  # resetting the timer for the next PERFORMANCE_UPDATE_EVERY_NUM_ITERATIONS of iterations
 
             # Incrementing training iteration counter
             self.total_training_iterations += 1
 
         # If we are done training
-        print("Learner finished after running " + str(self.total_training_iterations) + " training iterations!")
+        print(
+            "Learner finished after running "
+            + str(self.total_training_iterations)
+            + " training iterations!"
+        )
 
         # Flip the flag signalling all agents to stop
         stop_run_flag.set()

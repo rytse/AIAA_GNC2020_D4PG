@@ -9,8 +9,8 @@ import tensorflow as tf
 
 from settings import Settings
 
-class Saver:
 
+class Saver:
     def __init__(self, sess, filename):
         self.sess = sess
         self.filename = filename
@@ -22,20 +22,34 @@ class Saver:
 
         print("Saving neural networks at iteration number " + str(n_iteration) + "...")
 
-        os.makedirs(os.path.dirname(Settings.MODEL_SAVE_DIRECTORY + self.filename), exist_ok = True)
-        self.saver.save(self.sess, Settings.MODEL_SAVE_DIRECTORY + self.filename + "/Iteration_" + str(n_iteration) + ".ckpt")
+        os.makedirs(
+            os.path.dirname(Settings.MODEL_SAVE_DIRECTORY + self.filename),
+            exist_ok=True,
+        )
+        self.saver.save(
+            self.sess,
+            Settings.MODEL_SAVE_DIRECTORY
+            + self.filename
+            + "/Iteration_"
+            + str(n_iteration)
+            + ".ckpt",
+        )
 
     def load(self):
         # Try to load in weights to the networks in the current Session.
         # If it fails, or we don't want to load (Settings.RESUME_TRAINING = False)
         # then we start from scratch
 
-        self.saver = tf.train.Saver(max_to_keep = 2) # initialize the tensorflow Saver()
+        self.saver = tf.compat.v1.train.Saver(
+            max_to_keep=2
+        )  # initialize the tensorflow Saver()
 
         if Settings.RESUME_TRAINING:
             print("Attempting to load in previously-trained model")
             try:
-                ckpt = tf.train.get_checkpoint_state(Settings.MODEL_SAVE_DIRECTORY + Settings.RUN_NAME)
+                ckpt = tf.train.get_checkpoint_state(
+                    Settings.MODEL_SAVE_DIRECTORY + Settings.RUN_NAME
+                )
                 self.saver.restore(self.sess, ckpt.model_checkpoint_path)
                 print("Model successfully loaded!")
                 return True
@@ -47,4 +61,6 @@ class Saver:
             return False
 
     def initialize(self):
-        self.saver = tf.train.Saver(max_to_keep = 2) # initialize the tensorflow Saver() without trying to load in parameters
+        self.saver = tf.compat.v1.train.Saver(
+            max_to_keep=2
+        )  # initialize the tensorflow Saver() without trying to load in parameters

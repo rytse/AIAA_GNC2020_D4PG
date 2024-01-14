@@ -55,25 +55,28 @@ from prioritized_replay_buffer import PrioritizedReplayBuffer
 from settings import Settings
 import saver
 
-#%%
+# %%
 ##########################
 ##### SETTING UP RUN #####
 ##########################
 start_time = time.time()
 
 # Clearing Tensorflow graph
-tf.reset_default_graph()
+tf.compat.v1.reset_default_graph()
+tf.compat.v1.disable_eager_execution()
 
 # Setting Tensorflow configuration parameters
-config = tf.ConfigProto()
-config.intra_op_parallelism_threads = psutil.cpu_count(logical = False) # Number of CPU physical cores recommended
-if psutil.cpu_count(logical = False) == 32:
-    config.inter_op_parallelism_threads = 32 # RCDC has 32 sockets
+config = tf.compat.v1.ConfigProto()
+config.intra_op_parallelism_threads = psutil.cpu_count(
+    logical=False
+)  # Number of CPU physical cores recommended
+if psutil.cpu_count(logical=False) == 32:
+    config.inter_op_parallelism_threads = 32  # RCDC has 32 sockets
 else:
-    config.inter_op_parallelism_threads = 1 # All my other computers have 1
+    config.inter_op_parallelism_threads = 1  # All my other computers have 1
 
 # Set random seeds
-tf.set_random_seed(Settings.RANDOM_SEED)
+tf.compat.v1.set_random_seed(Settings.RANDOM_SEED)
 np.random.seed(Settings.RANDOM_SEED)
 random.seed(Settings.RANDOM_SEED)
 
@@ -83,60 +86,85 @@ random.seed(Settings.RANDOM_SEED)
 ############################################################
 # If we're continuing a run
 if Settings.RESUME_TRAINING:
-    filename                  = Settings.RUN_NAME # Reuse the name too
-    starting_episode_number   = np.zeros(Settings.NUMBER_OF_ACTORS, dtype = np.int8) # initializing
-    starting_iteration_number = 0 # initializing
+    filename = Settings.RUN_NAME  # Reuse the name too
+    starting_episode_number = np.zeros(
+        Settings.NUMBER_OF_ACTORS, dtype=np.int8
+    )  # initializing
+    starting_iteration_number = 0  # initializing
 
     try:
         # Grab the tensorboard path
-        old_tensorboard_filename = [i for i in os.listdir(Settings.MODEL_SAVE_DIRECTORY + filename) if i.endswith(Settings.TENSORBOARD_FILE_EXTENSION)][0]
+        old_tensorboard_filename = [
+            i
+            for i in os.listdir(Settings.MODEL_SAVE_DIRECTORY + filename)
+            if i.endswith(Settings.TENSORBOARD_FILE_EXTENSION)
+        ][0]
 
         # For every entry in the tensorboard file
-        for tensorboard_entry in tf.train.summary_iterator(Settings.MODEL_SAVE_DIRECTORY + filename + "/" + old_tensorboard_filename):
+        for tensorboard_entry in tf.compat.v1.train.summary_iterator(
+            Settings.MODEL_SAVE_DIRECTORY + filename + "/" + old_tensorboard_filename
+        ):
             # Search each one for the Loss value so you can find the final iteration number
             for tensorboard_value in tensorboard_entry.summary.value:
-                if tensorboard_value.tag == 'Logging_Learning/Loss':
-                    starting_iteration_number = max(tensorboard_entry.step, starting_iteration_number)
+                if tensorboard_value.tag == "Logging_Learning/Loss":
+                    starting_iteration_number = max(
+                        tensorboard_entry.step, starting_iteration_number
+                    )
 
             # Search also for the actors so you can find what episode they were on
             for agent_number in range(Settings.NUMBER_OF_ACTORS):
                 for tensorboard_value in tensorboard_entry.summary.value:
-                    if tensorboard_value.tag == 'Agent_' + str(agent_number + 1) + '/Number_of_timesteps':
-                        starting_episode_number[agent_number] = max(tensorboard_entry.step, starting_episode_number[agent_number])
+                    if (
+                        tensorboard_value.tag
+                        == "Agent_" + str(agent_number + 1) + "/Number_of_timesteps"
+                    ):
+                        starting_episode_number[agent_number] = max(
+                            tensorboard_entry.step,
+                            starting_episode_number[agent_number],
+                        )
 
     except:
         # If the load failed... quit run
         print("Couldn't load in old tensorboard file! Quitting run.")
         raise SystemExit
 
-else: # Otherwise, we are starting from scratch
+else:  # Otherwise, we are starting from scratch
     # Generate a filename using Settings.RUN_NAME with the current timestamp
-    filename                  = Settings.RUN_NAME + '-{:%Y-%m-%d_%H-%M}'.format(datetime.datetime.now())
-    starting_episode_number   = np.ones(Settings.NUMBER_OF_ACTORS, dtype = int) # All actors start at episode 0
-    starting_iteration_number = 1 # learner starts at iteration 0
+    filename = Settings.RUN_NAME + "-{:%Y-%m-%d_%H-%M}".format(datetime.datetime.now())
+    starting_episode_number = np.ones(
+        Settings.NUMBER_OF_ACTORS, dtype=int
+    )  # All actors start at episode 0
+    starting_iteration_number = 1  # learner starts at iteration 0
 
 # Generate writer that will log Tensorboard scalars & graph
-writer = tf.summary.FileWriter(Settings.MODEL_SAVE_DIRECTORY + filename, filename_suffix = Settings.TENSORBOARD_FILE_EXTENSION)
+writer = tf.compat.v1.summary.FileWriter(
+    Settings.MODEL_SAVE_DIRECTORY + filename,
+    filename_suffix=Settings.TENSORBOARD_FILE_EXTENSION,
+)
 
 # Saving a copy of the all python files used in this run, for reference
 # Make directory if it doesn't already exist
-os.makedirs(os.path.dirname(Settings.MODEL_SAVE_DIRECTORY + filename + '/code/'), exist_ok=True)
-for each_file in glob.glob('*.py'):
-    shutil.copy2(each_file, Settings.MODEL_SAVE_DIRECTORY + filename + '/code/')
+os.makedirs(
+    os.path.dirname(Settings.MODEL_SAVE_DIRECTORY + filename + "/code/"), exist_ok=True
+)
+for each_file in glob.glob("*.py"):
+    shutil.copy2(each_file, Settings.MODEL_SAVE_DIRECTORY + filename + "/code/")
 
 #######################################
 ##### Starting Tensorflow session #####
 #######################################
-with tf.Session(config = config) as sess:
+with tf.compat.v1.Session(config=config) as sess:
     print("\nThis run is named " + filename)
-    print("\nThe environment file is: environment_" + Settings.ENVIRONMENT + '\n')
+    print("\nThe environment file is: environment_" + Settings.ENVIRONMENT + "\n")
     if Settings.TEST_ON_DYNAMICS:
         print("At test time, full dynamics are being used\n")
     else:
         print("At test time, kinematics are being used\n")
 
     if Settings.KINEMATIC_NOISE:
-        print("Noise is being applied to the kinematics during training to simulate a poor controller\n")
+        print(
+            "Noise is being applied to the kinematics during training to simulate a poor controller\n"
+        )
 
     ##############################
     ##### Initializing items #####
@@ -157,9 +185,11 @@ with tf.Session(config = config) as sess:
 
     # Event()s are used to communicate with threads while they run.
     # In this case, it is used to signal to the threads when it is time to stop gracefully.
-    stop_run_flag           = threading.Event() # Flag to stop all threads
-    replay_buffer_dump_flag = threading.Event() # Flag to pause data writing to the replay buffer
-    replay_buffer_dump_flag.set() # Set the flag to initially be True so that the agents will write data
+    stop_run_flag = threading.Event()  # Flag to stop all threads
+    replay_buffer_dump_flag = (
+        threading.Event()
+    )  # Flag to pause data writing to the replay buffer
+    replay_buffer_dump_flag.set()  # Set the flag to initially be True so that the agents will write data
 
     # Generating the learner and assigning it to a thread
     if Settings.USE_GPU_WHEN_AVAILABLE:
@@ -169,48 +199,94 @@ with tf.Session(config = config) as sess:
         agent_to_learner, learner_to_agent = learner.generate_queue()
     else:
         # Forcing to the CPU only
-        with tf.device('/device:CPU:0'):
+        with tf.device("/device:CPU:0"):
             learner = Learner(sess, saver, replay_buffer, writer)
             # Generate the queue responsible for communicating with the agent (for test distribution calculating)
             agent_to_learner, learner_to_agent = learner.generate_queue()
-    threads.append(threading.Thread(target = learner.run, args = (stop_run_flag, replay_buffer_dump_flag, starting_iteration_number)))
+    threads.append(
+        threading.Thread(
+            target=learner.run,
+            args=(stop_run_flag, replay_buffer_dump_flag, starting_iteration_number),
+        )
+    )
 
     # Generating the actors and placing them into their own threads
     for i in range(Settings.NUMBER_OF_ACTORS):
         if Settings.USE_GPU_WHEN_AVAILABLE:
             # Allow GPU use when appropriate
             # Make an instance of the environment which will be placed in its own process
-            environment_file = __import__('environment_' + Settings.ENVIRONMENT)
-            if Settings.ENVIRONMENT == 'gym':
-                environment = environment_file.Environment(filename, i+1, Settings.CHECK_GREEDY_PERFORMANCE_EVERY_NUM_EPISODES, Settings.VIDEO_RECORD_FREQUENCY, Settings.MODEL_SAVE_DIRECTORY) # Additional parameters needed for gym
+            environment_file = __import__("environment_" + Settings.ENVIRONMENT)
+            if Settings.ENVIRONMENT == "gym":
+                environment = environment_file.Environment(
+                    filename,
+                    i + 1,
+                    Settings.CHECK_GREEDY_PERFORMANCE_EVERY_NUM_EPISODES,
+                    Settings.VIDEO_RECORD_FREQUENCY,
+                    Settings.MODEL_SAVE_DIRECTORY,
+                )  # Additional parameters needed for gym
             else:
                 environment = environment_file.Environment()
             # Set the environment seed
-            environment.seed(Settings.RANDOM_SEED*(i+1))
+            environment.seed(Settings.RANDOM_SEED * (i + 1))
             # Generate the queue responsible for communicating with the agent
             agent_to_env, env_to_agent = environment.generate_queue()
             # Generate the actor
-            actor = Agent(sess, i+1, agent_to_env, env_to_agent, replay_buffer, writer, filename, learner.actor.parameters, agent_to_learner, learner_to_agent)
+            actor = Agent(
+                sess,
+                i + 1,
+                agent_to_env,
+                env_to_agent,
+                replay_buffer,
+                writer,
+                filename,
+                learner.actor.parameters,
+                agent_to_learner,
+                learner_to_agent,
+            )
 
         else:
-            with tf.device('/device:CPU:0'):
+            with tf.device("/device:CPU:0"):
                 # Forcing to the CPU only
                 # Make an instance of the environment which will be placed in its own process
-                environment_file = __import__('environment_' + Settings.ENVIRONMENT)
-                if Settings.ENVIRONMENT == 'gym':
-                    environment = environment_file.Environment(filename, i+1, Settings.CHECK_GREEDY_PERFORMANCE_EVERY_NUM_EPISODES, Settings.VIDEO_RECORD_FREQUENCY, Settings.MODEL_SAVE_DIRECTORY) # Additional parameters needed for gym
+                environment_file = __import__("environment_" + Settings.ENVIRONMENT)
+                if Settings.ENVIRONMENT == "gym":
+                    environment = environment_file.Environment(
+                        filename,
+                        i + 1,
+                        Settings.CHECK_GREEDY_PERFORMANCE_EVERY_NUM_EPISODES,
+                        Settings.VIDEO_RECORD_FREQUENCY,
+                        Settings.MODEL_SAVE_DIRECTORY,
+                    )  # Additional parameters needed for gym
                 else:
                     environment = environment_file.Environment()
                 # Set the environment seed
-                environment.seed(Settings.RANDOM_SEED*(i+1))
+                environment.seed(Settings.RANDOM_SEED * (i + 1))
                 # Generate the queue responsible for communicating with the agent
                 agent_to_env, env_to_agent = environment.generate_queue()
                 # Generate the actor
-                actor = Agent(sess, i+1, agent_to_env, env_to_agent, replay_buffer, writer, filename, learner.actor.parameters, agent_to_learner, learner_to_agent)
+                actor = Agent(
+                    sess,
+                    i + 1,
+                    agent_to_env,
+                    env_to_agent,
+                    replay_buffer,
+                    writer,
+                    filename,
+                    learner.actor.parameters,
+                    agent_to_learner,
+                    learner_to_agent,
+                )
 
         # Add thread and process to the list
-        threads.append(threading.Thread(target = actor.run, args = (stop_run_flag, replay_buffer_dump_flag, starting_episode_number)))
-        environment_processes.append(multiprocessing.Process(target = environment.run, daemon = True)) # daemon ensures process is killed when main ends
+        threads.append(
+            threading.Thread(
+                target=actor.run,
+                args=(stop_run_flag, replay_buffer_dump_flag, starting_episode_number),
+            )
+        )
+        environment_processes.append(
+            multiprocessing.Process(target=environment.run, daemon=True)
+        )  # daemon ensures process is killed when main ends
 
     # If desired, try to load in partially-trained parameters
     if Settings.RESUME_TRAINING == True:
@@ -223,8 +299,7 @@ with tf.Session(config = config) as sess:
         # Initialize saver
         saver.initialize()
         # Initialize Tensorflow variables
-        sess.run(tf.global_variables_initializer())
-
+        sess.run(tf.compat.v1.global_variables_initializer())
 
     # Starting all environments
     for each_process in environment_processes:
@@ -235,9 +310,9 @@ with tf.Session(config = config) as sess:
     #############################################
     #                                           #
     #                                           #
-    for each_thread in threads:                 #
-    #                                           #
-        each_thread.start()                     #
+    for each_thread in threads:  #
+        #                                           #
+        each_thread.start()  #
     #                                           #
     #                                           #
     #############################################
@@ -246,8 +321,7 @@ with tf.Session(config = config) as sess:
 
     # Write the Tensorflow computation graph to file, now that it has been fully built
     writer.add_graph(sess.graph)
-    print('Done starting!')
-
+    print("Done starting!")
 
     ####################################################
     ##### Waiting until all threads have completed #####
@@ -260,7 +334,7 @@ with tf.Session(config = config) as sess:
             if not any(each_thread.is_alive() for each_thread in threads):
                 print("All threads ended naturally.")
                 break
-    except KeyboardInterrupt: # if someone pressed Ctrl + C
+    except KeyboardInterrupt:  # if someone pressed Ctrl + C
         print("Interrupted by user!")
         print("Stopping all the threads!!")
         # Gracefully stop all threads, ending episodes and saving data
@@ -269,5 +343,5 @@ with tf.Session(config = config) as sess:
         for each_thread in threads:
             each_thread.join()
 
-    print("This run completed in %.3f hours." %((time.time() - start_time)/3600))
+    print("This run completed in %.3f hours." % ((time.time() - start_time) / 3600))
     print("Done closing! Goodbye :)")
